@@ -5,6 +5,7 @@ import uuid
 import time
 import pandas as pd
 import io
+import requests
 from openai import OpenAI
 
 # Initialize OpenAI client
@@ -61,6 +62,27 @@ def update_openai_client(openai_api_key, assistant_api_key):
         metadata={'session_id': st.session_state.session_id}
     )
 
+def search_core_entities(entity_type, query, limit=10, offset=0, stats=False, api_key=st.secrets["CORE_API"]):
+    api_endpoint = f"https://api.core.ac.uk/v3/search/{entity_type}"
+    headers = {'Authorization': f'Bearer {api_key}'}
+    # Ensure 'fields' parameter requests all needed information
+    params = {
+        'q': query,
+        'limit': limit,
+        'offset': offset,
+        'stats': stats,
+        'fields': 'title,authors,publishedDate,sourceFulltextUrls,description'  # Adjust based on actual API field names
+    }
+    print(params)
+    response = requests.get(api_endpoint, headers=headers, params=params)
+    if response.status_code == 200:
+        articles = response.json().get('results', [])
+        return articles
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+        return []
+
+
 # Button to trigger the update function
 if st.sidebar.button("Update API Keys"):
     if openai_api_key and assistant_api_key:  # Ensure both keys are provided before updating
@@ -71,6 +93,7 @@ if st.sidebar.button("Update API Keys"):
 
 # File uploader for CSV, XLS, XLSX
 uploaded_file = st.file_uploader("Upload your file", type=["csv", "xls", "xlsx"])
+
 
 if uploaded_file is not None:
     # Determine the file type
@@ -119,30 +142,110 @@ elif hasattr(st.session_state.run, 'status') and st.session_state.run.status == 
                     message_text = content_part.text.value
                     st.markdown(message_text)
 
+def is_search_query(prompt):
+    ai_prompt = (f"Please analyze whether the following user input is specifically asking for academic articles "
+                 f"from a database and not a general support question related to the IB Extended Essay. If it is a request for articles, identify that it is a search query"
+                 f"and extract the key search terms. Otherwise, indicate it's not a search query")
+
+    completion = openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": ai_prompt},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=200,
+    )
+
+    print(completion.choices[0].message.content)
+    # Assuming the last message in the completion will be the AI's response
+    response_message = completion.choices[0].message.content  # Access the content attribute directly
+
+    # Adjust this to correctly identify the start of the key terms list in the response
+    search_terms_start_phrase = "terms are:"
+    search_terms_lines = response_message.split('\n')
+    search_terms = []
+    print(search_terms_lines)
+    extracting = False
+    for line in search_terms_lines:
+        print(line)
+        line = line.strip()
+        print(line)
+        if extracting and line.startswith("-"):
+            term = line.strip('- ').strip()
+            if term:  # Ensure the line isn't empty
+                search_terms.append(term)
+        elif search_terms_start_phrase.lower() in line.lower():
+            extracting = True  # Start extracting terms from the next line
+    
+    if search_terms:
+        # Concatenate extracted terms with "OR" for broader searches, or "AND" for more specific searches
+        formatted_search_terms = " OR ".join(search_terms)
+        print("Extracted search terms:", formatted_search_terms)
+        return True, formatted_search_terms
+    else:
+        print("No search terms were extracted.")
+        return False, None
+
+def handle_search_query(search_terms):
+    # Call the search function with the extracted terms
+    results = search_core_entities("works", search_terms, limit=5)  # Adjust the limit as needed
+    return results
+
+def format_article(article):
+    title = article.get('title', 'N/A')
+    authors = ", ".join([author.get('name', 'N/A') for author in article.get('authors', [])])
+    published_date = article.get('publishedDate', 'N/A')
+    urls = article.get('sourceFulltextUrls', ['N/A'])[0]
+    abstract = article.get('abstract', 'N/A')
+
+    # Cap the abstract length to 150 characters
+    if len(abstract) > 250:
+        abstract = abstract[:250] + '...'
+
+    # Use Markdown formatting for better readability
+    formatted_str = f"**Title:** {title}\n" \
+                    f"**Authors:** {authors}\n" \
+                    f"**Published Date:** {published_date}\n" \
+                    f"**URL:** [Link]({urls})\n" \
+                    f"**Abstract:** {abstract}"
+    return formatted_str
+
+
 # Chat input and message creation with file ID
 if prompt := st.chat_input("How can I help you?"):
     with st.chat_message('user'):
         st.write(prompt)
 
-    message_data = {
-        "thread_id": st.session_state.thread.id,
-        "role": "user",
-        "content": prompt
-    }
+    is_search, search_terms = is_search_query(prompt)
+    if is_search:
+        # Use the extracted search terms to perform the search
+        results = search_core_entities("works", search_terms, limit=5)
+        if results:
+            response = "\n\n".join([format_article(article) for article in results])
+            st.write(response)
+        else:
+            st.write("No articles found. Please try a different query.")
+    else:
+        # Proceed with sending the prompt to the OpenAI API as before
+        message_data = {
+            "thread_id": st.session_state.thread.id,
+            "role": "user",
+            "content": prompt
+        }
 
-    # Include file ID in the request if available
-    if "file_id" in st.session_state:
-        message_data["file_ids"] = [st.session_state.file_id]
+        # Include file ID in the request if available
+        if "file_id" in st.session_state:
+            message_data["file_ids"] = [st.session_state.file_id]
 
-    st.session_state.messages = openai.beta.threads.messages.create(**message_data)
+        st.session_state.messages = openai.beta.threads.messages.create(**message_data)
 
-    st.session_state.run = openai.beta.threads.runs.create(
-        thread_id=st.session_state.thread.id,
-        assistant_id=st.session_state.assistant.id,
-    )
-    if st.session_state.retry_error < 3:
-        time.sleep(1)
-        st.rerun()
+        st.session_state.run = openai.beta.threads.runs.create(
+            thread_id=st.session_state.thread.id,
+            assistant_id=st.session_state.assistant.id,
+        )
+        if st.session_state.retry_error < 3:
+            time.sleep(1)
+            st.rerun()
 
 # Handle run status
 if hasattr(st.session_state.run, 'status'):
