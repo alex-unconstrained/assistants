@@ -5,6 +5,8 @@ import uuid
 import time
 import pandas as pd
 import io
+import json
+import os
 from openai import OpenAI
 
 # Initialize OpenAI client
@@ -43,6 +45,41 @@ st.markdown("""
     - **Identying gaps in understanding:** Type /plan followed by a topic to get a study plan.
 """)
 
+# Modify the log_feedback function to include message content
+def log_feedback(message_content, feedback, feedback_type='assistant_message'):
+    # Define the path for the feedback log file
+    feedback_file_path = 'feedback_log.json'
+
+    # Structure the feedback data
+    feedback_data = {
+        'message_content': message_content,  # Log message content instead of ID
+        'feedback': feedback,  # 'up' for thumbs up, 'down' for thumbs down
+        'feedback_type': feedback_type  # Differentiates between assistant message feedback and general feedback
+    }
+
+    # Check if the feedback file already exists
+    if os.path.exists(feedback_file_path):
+        # Read existing data and append new feedback
+        with open(feedback_file_path, 'r+') as file:
+            data = json.load(file)
+            data.append(feedback_data)
+            file.seek(0)
+            json.dump(data, file, indent=4)
+    else:
+        # Create a new file and log the feedback
+        with open(feedback_file_path, 'w') as file:
+            json.dump([feedback_data], file, indent=4)
+
+
+# Create a separate column for general feedback
+with st.sidebar:
+    st.subheader("General Feedback")
+    general_feedback = st.text_area("Your feedback:", value="", max_chars=500, help="Enter any feedback you have here.")
+    if st.button("Submit Feedback"):
+        # Log the general feedback to the same JSON file
+        log_feedback(general_feedback, 'n/a', feedback_type='general_feedback')
+        st.success("Thank you for your feedback!")
+        
 # File uploader for CSV, XLS, XLSX
 uploaded_file = st.file_uploader("Upload your file", type=["csv", "xls", "xlsx"])
 
@@ -89,9 +126,20 @@ elif hasattr(st.session_state.run, 'status') and st.session_state.run.status == 
     for message in reversed(st.session_state.messages.data):
         if message.role in ["user", "assistant"]:
             with st.chat_message(message.role):
-                for content_part in message.content:
-                    message_text = content_part.text.value
-                    st.markdown(message_text)
+                with st.container():
+                    col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+                    with col1:
+                        for content_part in message.content:
+                            message_text = content_part.text.value
+                            st.markdown(message_text)
+                    with col2:
+                        if st.button("👍", key=f"up_{message.id}"):
+                            log_feedback(message_text, 'up')
+                            st.success("Feedback recorded!")
+                    with col3:
+                        if st.button("👎", key=f"down_{message.id}"):
+                            log_feedback(message_text, 'down')
+                            st.error("Feedback recorded!")
 
 # Bot Introduction
 introduction = """
