@@ -114,7 +114,7 @@ If you're ready to dive into IB Chemistry or have any questions, feel free to as
 """
 
 # Display the bot introduction
-st.write(introduction)
+#st.write(introduction)
 
 # Chat input and message creation with file ID
 if prompt := st.chat_input("How can I help you?"):
@@ -135,7 +135,7 @@ if prompt := st.chat_input("How can I help you?"):
 
     st.session_state.run = client.beta.threads.runs.create(
         thread_id=st.session_state.thread.id,
-        assistant_id=st.session_state.assistant.id,
+        assistant_id=st.session_state.assistant.id
     )
     if st.session_state.retry_error < 3:
         time.sleep(1)
