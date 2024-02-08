@@ -7,10 +7,19 @@ import pandas as pd
 import io
 import json
 import os
+import boto3
 from openai import OpenAI
+from datetime import datetime
 
 # Initialize OpenAI client
 client = OpenAI()
+
+# Create an S3 resource
+s3 = boto3.resource('s3')
+
+# Print out bucket names
+for bucket in s3.buckets.all():
+    print(bucket.name)
 
 # Your chosen model
 #MODEL = "gpt-3.5-turbo-16k" # Legacy
@@ -45,30 +54,29 @@ st.markdown("""
     - **Identying gaps in understanding:** Type /plan followed by a topic to get a study plan.
 """)
 
-# Modify the log_feedback function to include message content
-def log_feedback(message_content, feedback, feedback_type='assistant_message'):
-    # Define the path for the feedback log file
-    feedback_file_path = 'feedback_log.json'
+# Initialize a boto3 client
+s3_client = boto3.client('s3')
 
+def log_feedback(message_content, feedback, feedback_type='assistant_message'):
+    # Specify your bucket name
+    bucket_name = 'chem-feedback'
+    
+    # Generate a unique file name for each feedback entry, e.g., using a timestamp
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    file_name = f'feedback/{feedback_type}/{timestamp}.json'
+    
     # Structure the feedback data
     feedback_data = {
-        'message_content': message_content,  # Log message content instead of ID
-        'feedback': feedback,  # 'up' for thumbs up, 'down' for thumbs down
-        'feedback_type': feedback_type  # Differentiates between assistant message feedback and general feedback
+        'message_content': message_content,
+        'feedback': feedback,
+        'feedback_type': feedback_type
     }
-
-    # Check if the feedback file already exists
-    if os.path.exists(feedback_file_path):
-        # Read existing data and append new feedback
-        with open(feedback_file_path, 'r+') as file:
-            data = json.load(file)
-            data.append(feedback_data)
-            file.seek(0)
-            json.dump(data, file, indent=4)
-    else:
-        # Create a new file and log the feedback
-        with open(feedback_file_path, 'w') as file:
-            json.dump([feedback_data], file, indent=4)
+    
+    # Convert the feedback data to JSON
+    feedback_json = json.dumps(feedback_data)
+    
+    # Upload the feedback data to S3
+    s3_client.put_object(Bucket=bucket_name, Key=file_name, Body=feedback_json)
 
 
 # Create a separate column for general feedback
