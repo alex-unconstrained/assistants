@@ -14,12 +14,16 @@ from datetime import datetime
 # Initialize OpenAI client
 client = OpenAI()
 
-# Create an S3 resource
-s3 = boto3.resource('s3')
+# Accessing secrets
+aws_access_key_id = st.secrets["aws"]["aws_access_key_id"]
+aws_secret_access_key = st.secrets["aws"]["aws_secret_access_key"]
 
-# Print out bucket names
-for bucket in s3.buckets.all():
-    print(bucket.name)
+# Configuring boto3 client with secrets
+s3_client = boto3.client(
+    's3',
+    aws_access_key_id=aws_access_key_id,
+    aws_secret_access_key=aws_secret_access_key
+)
 
 # Your chosen model
 #MODEL = "gpt-3.5-turbo-16k" # Legacy
@@ -53,9 +57,6 @@ st.markdown("""
     - **Test practice:** Ask it to generate sample test questions on any topic and in any style.
     - **Identying gaps in understanding:** Type /plan followed by a topic to get a study plan.
 """)
-
-# Initialize a boto3 client
-s3_client = boto3.client('s3')
 
 def log_feedback(message_content, feedback, feedback_type='assistant_message'):
     # Specify your bucket name
