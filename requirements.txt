@@ -1,7 +1,4 @@
 openai
 streamlit
 pandas
-os
 boto3
-datetime
-io
