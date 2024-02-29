@@ -31,15 +31,27 @@ if "retry_error" not in st.session_state:
 
 # Set up the page
 st.set_page_config(page_title="Assistant Playground")
-st.title("Assistant Playground")
+st.title("UnconstrainED Assistant Playground")
 
+# Assuming your logo is named 'company_logo.png' and stored in the same directory as your app
+st.sidebar.image('UC_Logo.png', use_column_width=True)
+# Replace 'https://yourcompanywebsite.com' with your actual company website URL
+st.sidebar.markdown('<a href="https://unconstrained.co" target="_blank">UnconstrainED Website</a>', unsafe_allow_html=True)
+st.sidebar.markdown('<a href="https://discord.com/invite/qnXPjsuv5q" target="_blank">Discord Community</a>', unsafe_allow_html=True)
 
 
 # Add input fields for the OpenAI API Key and the Assistant's API Key
 assistant_api_key = st.sidebar.text_input("Enter your Assistant's API Key", type="password")
 
+# New: Input for OpenAI API Key
+openai_api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
+
+
+
 # Function to initialize or update the OpenAI client and assistant with the provided API keys
-def update_openai_client( assistant_api_key):
+def update_openai_client(openai_api_key, assistant_api_key):
+    if openai_api_key:  # Check if the OpenAI API key is provided
+        openai.api_key = openai_api_key  # Use the user-provided OpenAI API key
     # Assuming assistant_api_key is used for a custom purpose, like fetching a specific assistant configuration
     # Adjust the implementation based on your actual use case
     if assistant_api_key:  # Example condition, replace with actual logic if needed
@@ -49,6 +61,7 @@ def update_openai_client( assistant_api_key):
         st.session_state.thread = openai.beta.threads.create(
         metadata={'session_id': st.session_state.session_id}
     )
+
 
 def search_core_entities(entity_type, query, limit=10, offset=0, stats=False, api_key=st.secrets["CORE_API"]):
     api_endpoint = f"https://api.core.ac.uk/v3/search/{entity_type}"
@@ -78,6 +91,13 @@ if st.sidebar.button("Update API Keys"):
         st.sidebar.success("Assistant key updated successfully!")
     else:
         st.sidebar.error("Please enter your assistant key first.")
+
+st.sidebar.write("""
+This application is designed to provide real-time AI-powered assistance. 
+You can quickly experiment with OpenAI prototypes by simply entering your unique 
+                 Assistants ID & your OpenAI API key to begin. 
+                 For support, visit our community Discord.
+""")
 
 # File uploader for CSV, XLS, XLSX
 uploaded_file = st.file_uploader("Upload your file", type=["csv", "xls", "xlsx"])
