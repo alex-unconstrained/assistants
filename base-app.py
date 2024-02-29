@@ -91,7 +91,7 @@ if st.sidebar.button("Update API Keys"):
             update_openai_client(openai_api_key, assistant_api_key)
             st.sidebar.success("API keys updated successfully!")
         else:
-            update_openai_client(st.secrets("OPENAI_API_KEY"), assistant_api_key)
+            update_openai_client(st.secrets["OPENAI_API_KEY"], assistant_api_key)
             st.sidebar.success("Assistant key updated successfully!")
     else:
         st.sidebar.error("Please enter your assistant key first.")
