@@ -56,7 +56,7 @@ st.markdown("""
 # Initialize OpenAI assistant
 if "assistant" not in st.session_state:
     openai.api_key = st.secrets["OPENAI_API_KEY"]
-    st.session_state.assistant = openai.beta.assistants.retrieve(st.secrets["CHEM_HELPER"])
+    st.session_state.assistant = openai.beta.assistants.retrieve(st.secrets["LEGACY"])
     st.session_state.thread = client.beta.threads.create(
         metadata={'session_id': st.session_state.session_id}
     )
@@ -92,8 +92,7 @@ if prompt := st.chat_input("How can I help you?"):
 
     st.session_state.run = client.beta.threads.runs.create(
         thread_id=st.session_state.thread.id,
-        assistant_id=st.session_state.assistant.id,
-        instructions="Please address the user as Jane Doe. The user has a premium account."
+        assistant_id=st.session_state.assistant.id
     )
 
     if st.session_state.retry_error < 3:
