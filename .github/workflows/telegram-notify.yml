@@ -1,0 +1,87 @@
+name: Commit Notification
+
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 << 'PYEOF'
+          import os, json, subprocess, urllib.request
+
+          def run(cmd):
+              try:
+                  return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+              except:
+                  return ""
+
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
+          repo_name = repo.split("/")[-1] if "/" in repo else repo
+          branch = os.environ.get("GITHUB_REF", "").replace("refs/heads/", "")
+          commit_hash = run("git rev-parse --short HEAD")
+          author = run("git log -1 --pretty=%an")
+          commit_msg = run("git log -1 --pretty=%B")
+          stats = run("git diff --stat HEAD~1 HEAD 2>/dev/null | tail -1")
+          files = run("git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10")
+
+          # AI summary via Gemini
+          ai_summary = ""
+          gemini_key = os.environ.get("GEMINI_API_KEY", "")
+          if gemini_key:
+              try:
+                  prompt = (
+                      f"Summarize this git commit in 1-2 sentences for a non-technical project owner. "
+                      f"Be concise and focus on what changed and why it matters. Under 150 chars.\n\n"
+                      f"Repo: {repo_name}\nBranch: {branch}\nCommit: {commit_msg[:400]}\n"
+                      f"Files: {files[:300]}\nStats: {stats}"
+                  )
+                  payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
+                  req = urllib.request.Request(
+                      f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
+                      data=payload,
+                      headers={"Content-Type": "application/json"},
+                  )
+                  with urllib.request.urlopen(req, timeout=10) as r:
+                      data = json.load(r)
+                      ai_summary = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+              except Exception as e:
+                  pass
+
+          summary = ai_summary if ai_summary else commit_msg.split("\n")[0][:200]
+
+          lines = [f"🔨 {repo_name} · {branch}", "", summary]
+          if stats:
+              lines += ["", f"📊 {stats}"]
+          lines += ["", f"commit {commit_hash} · {author}"]
+          text = "\n".join(lines)
+
+          bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+          chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+          if not bot_token or not chat_id:
+              print("Missing Telegram credentials — skipping")
+              exit(0)
+
+          payload = json.dumps({"chat_id": chat_id, "text": text, "disable_web_page_preview": True}).encode()
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{bot_token}/sendMessage",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as r:
+                  print("✅ Telegram notification sent")
+          except Exception as e:
+              print(f"⚠️  Telegram send failed: {e}")
+          PYEOF
