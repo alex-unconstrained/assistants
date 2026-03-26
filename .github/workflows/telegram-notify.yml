@@ -12,7 +12,18 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Check if only workflow file changed
+        id: check
+        run: |
+          changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          if [ "$changed" = ".github/workflows/telegram-notify.yml" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Send Telegram notification
+        if: steps.check.outputs.skip != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -81,7 +92,7 @@ jobs:
           )
           try:
               with urllib.request.urlopen(req, timeout=10) as r:
-                  print("✅ Telegram notification sent")
+                  print("Telegram notification sent")
           except Exception as e:
-              print(f"⚠️  Telegram send failed: {e}")
+              print(f"Telegram send failed: {e}")
           PYEOF
